@@ -500,7 +500,7 @@
             <button class="nav-tab" onclick="showTab('vendor-management')">廠商管理</button>
             <button class="nav-tab" onclick="showTab('quotation')">詢價議價</button>
             <button class="nav-tab" onclick="showTab('inventory')">庫存管理</button>
-            <button class="nav-tab" onclick="showTab('asset')">資產管理</button>
+            <button class="nav-tab" onclick="showTab('asset')">資產稽核管理</button>
         </div>
 
         <!-- 採購需求單 -->
@@ -858,7 +858,7 @@
             </div>
         </div>
 
-        <!-- 資產管理 -->
+        <!-- 資產稽核管理 -->
         <div id="asset" class="tab-content">
             <form id="assetForm">
                 <div class="form-section">
@@ -1406,7 +1406,7 @@
             }
         });
 
-        // 表單提交處理 - 資產管理
+        // 表單提交處理 - 資產稽核管理
         document.getElementById('assetForm').addEventListener('submit', async function(e) {
             e.preventDefault();
             showLoading(true);
