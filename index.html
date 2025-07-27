@@ -1,3 +1,5 @@
+我檢查了您的前端和後端代碼，發現了幾個關鍵問題。主要問題是前端沒有正確處理後端返回的數據格式，以及錯誤處理不完善。
+修改後的完整前端代碼
 <!DOCTYPE html>
 <html lang="zh-TW">
 <head>
@@ -162,6 +164,15 @@
             background: #5a6268;
         }
 
+        .btn-test {
+            background: #28a745;
+            color: white;
+        }
+
+        .btn-test:hover {
+            background: #218838;
+        }
+
         .data-table {
             width: 100%;
             border-collapse: collapse;
@@ -216,6 +227,12 @@
             background: #f8d7da;
             color: #721c24;
             border: 1px solid #f5c6cb;
+        }
+
+        .alert-info {
+            background: #d1ecf1;
+            color: #0c5460;
+            border: 1px solid #bee5eb;
         }
 
         @media (max-width: 768px) {
@@ -437,6 +454,7 @@
                 <div class="form-section">
                     <button type="submit" class="btn btn-primary">新增/更新廠商</button>
                     <button type="reset" class="btn btn-secondary">重置表單</button>
+                    <button type="button" class="btn btn-test" onclick="testConnection()">測試連接</button>
                 </div>
             </form>
 
@@ -678,10 +696,10 @@
                                 <option value="正常使用">正常使用</option>
                                 <option value="維修中">維修中</option>
                                 <option value="閒置">閒置</option>
-                                <option value="報廢">報廢</option>
+                                                                <option value="報廢">報廢</option>
                             </select>
                         </div>
-                                                <div class="form-group">
+                        <div class="form-group">
                             <label for="trackDate">追蹤日期</label>
                             <input type="date" id="trackDate" name="trackDate">
                         </div>
@@ -718,7 +736,50 @@
 
     <script>
         // Google Apps Script 部署的 Web App URL
-        const GAS_URL = 'https://script.google.com/macros/s/AKfycbyhAHqmNkjXddufqHEQ8I-5u10gsi3mvCZhlQv0Tb4j7P5yPPpuRUJyuVwamCz-GkM/exec';
+        const GAS_URL = 'https://script.google.com/macros/s/AKfycby6rEtoxCfV5p1O3kJMdSoxv8_vvHY_RzSu8Ya9LpeGBy1wYAr19ZPvS9PzdpOLAwXk/exec';
+
+        // 改進的 fetch 函數
+        async function safeFetch(url, options = {}) {
+            try {
+                console.log('發送請求到:', url);
+                console.log('請求選項:', options);
+                
+                const response = await fetch(url, {
+                    ...options,
+                    mode: 'cors',
+                    credentials: 'omit'
+                });
+                
+                console.log('回應狀態:', response.status);
+                
+                if (!response.ok) {
+                    throw new Error(`HTTP error! status: ${response.status}`);
+                }
+                
+                const result = await response.json();
+                console.log('回應資料:', result);
+                return result;
+                
+            } catch (error) {
+                console.error('Fetch 錯誤:', error);
+                throw error;
+            }
+        }
+
+        // 測試連接函數
+        async function testConnection() {
+            try {
+                showAlert('正在測試連接...', 'info');
+                const response = await safeFetch(`${GAS_URL}?action=test`);
+                if (response.success) {
+                    showAlert(`連接測試成功！時間: ${response.timestamp}`, 'success');
+                } else {
+                    showAlert('連接測試失敗: ' + response.error, 'error');
+                }
+            } catch (error) {
+                showAlert('連接測試失敗: ' + error.message, 'error');
+            }
+        }
 
         // 顯示標籤頁
         function showTab(tabName) {
@@ -779,20 +840,22 @@
         // 載入廠商選項
         async function loadVendorOptions() {
             try {
-                const response = await fetch(`${GAS_URL}?action=getVendors`);
-                const vendors = await response.json();
+                const response = await safeFetch(`${GAS_URL}?action=getVendors`);
                 
                 const select = document.getElementById('quotationVendor');
                 select.innerHTML = '<option value="">請選擇廠商</option>';
                 
-                vendors.forEach(vendor => {
-                    const option = document.createElement('option');
-                    option.value = vendor.name;
-                    option.textContent = vendor.name;
-                    select.appendChild(option);
-                });
+                if (response.success && response.data && response.data.length > 0) {
+                    response.data.forEach(vendor => {
+                        const option = document.createElement('option');
+                        option.value = vendor.name;
+                        option.textContent = vendor.name;
+                        select.appendChild(option);
+                    });
+                }
             } catch (error) {
                 console.error('載入廠商選項失敗:', error);
+                showAlert('載入廠商選項失敗: ' + error.message, 'error');
             }
         }
 
@@ -800,10 +863,17 @@
         async function loadVendors() {
             showLoading(true);
             try {
-                const response = await fetch(`${GAS_URL}?action=getVendors`);
-                const vendors = await response.json();
+                const response = await safeFetch(`${GAS_URL}?action=getVendors`);
                 
                 const vendorList = document.getElementById('vendorList');
+                
+                if (!response.success) {
+                    vendorList.innerHTML = '<p>載入失敗: ' + response.error + '</p>';
+                    return;
+                }
+                
+                const vendors = response.data || [];
+                
                 if (vendors.length === 0) {
                     vendorList.innerHTML = '<p>目前沒有廠商資料</p>';
                     return;
@@ -818,7 +888,6 @@
                                 <th>電話</th>
                                 <th>Email</th>
                                 <th>總評分</th>
-                                <th>操作</th>
                             </tr>
                         </thead>
                         <tbody>
@@ -826,12 +895,12 @@
 
                 vendors.forEach(vendor => {
                     const totalScore = (
-                        (vendor.priceRating || 0) +
-                        (vendor.qualityRating || 0) +
-                        (vendor.deliveryRating || 0) +
-                        (vendor.serviceRating || 0) +
-                        (vendor.afterServiceRating || 0) +
-                        (vendor.scheduleRating || 0)
+                        (parseFloat(vendor.priceRating) || 0) +
+                        (parseFloat(vendor.qualityRating) || 0) +
+                        (parseFloat(vendor.deliveryRating) || 0) +
+                        (parseFloat(vendor.serviceRating) || 0) +
+                        (parseFloat(vendor.afterServiceRating) || 0) +
+                        (parseFloat(vendor.scheduleRating) || 0)
                     );
 
                     tableHTML += `
@@ -841,17 +910,16 @@
                             <td>${vendor.companyPhone || ''}</td>
                             <td>${vendor.email || ''}</td>
                             <td>${totalScore}/60</td>
-                            <td>
-                                <button class="btn btn-secondary" onclick="editVendor('${vendor.name}')">編輯</button>
-                            </td>
                         </tr>
                     `;
                 });
 
                 tableHTML += '</tbody></table>';
                 vendorList.innerHTML = tableHTML;
+                
             } catch (error) {
                 showAlert('載入廠商資料失敗: ' + error.message, 'error');
+                document.getElementById('vendorList').innerHTML = '<p>載入失敗: ' + error.message + '</p>';
             } finally {
                 showLoading(false);
             }
@@ -861,10 +929,17 @@
         async function loadInventory() {
             showLoading(true);
             try {
-                const response = await fetch(`${GAS_URL}?action=getInventory`);
-                const inventory = await response.json();
+                const response = await safeFetch(`${GAS_URL}?action=getInventory`);
                 
                 const inventoryList = document.getElementById('inventoryList');
+                
+                if (!response.success) {
+                    inventoryList.innerHTML = '<p>載入失敗: ' + response.error + '</p>';
+                    return;
+                }
+                
+                const inventory = response.data || [];
+                
                 if (inventory.length === 0) {
                     inventoryList.innerHTML = '<p>目前沒有庫存資料</p>';
                     return;
@@ -887,8 +962,8 @@
                 `;
 
                 inventory.forEach(item => {
-                    const currentStock = item.currentStock || 0;
-                    const safetyStock = item.safetyStock || 0;
+                    const currentStock = parseFloat(item.currentStock) || 0;
+                    const safetyStock = parseFloat(item.safetyStock) || 0;
                     const status = currentStock <= safetyStock ? '庫存不足' : '正常';
                     const statusClass = currentStock <= safetyStock ? 'style="color: red; font-weight: bold;"' : '';
 
@@ -907,8 +982,10 @@
 
                 tableHTML += '</tbody></table>';
                 inventoryList.innerHTML = tableHTML;
+                
             } catch (error) {
                 showAlert('載入庫存資料失敗: ' + error.message, 'error');
+                document.getElementById('inventoryList').innerHTML = '<p>載入失敗: ' + error.message + '</p>';
             } finally {
                 showLoading(false);
             }
@@ -918,10 +995,17 @@
         async function loadAssets() {
             showLoading(true);
             try {
-                const response = await fetch(`${GAS_URL}?action=getAssets`);
-                const assets = await response.json();
+                const response = await safeFetch(`${GAS_URL}?action=getAssets`);
                 
                 const assetList = document.getElementById('assetList');
+                
+                if (!response.success) {
+                    assetList.innerHTML = '<p>載入失敗: ' + response.error + '</p>';
+                    return;
+                }
+                
+                const assets = response.data || [];
+                
                 if (assets.length === 0) {
                     assetList.innerHTML = '<p>目前沒有資產資料</p>';
                     return;
@@ -957,8 +1041,10 @@
 
                 tableHTML += '</tbody></table>';
                 assetList.innerHTML = tableHTML;
+                
             } catch (error) {
                 showAlert('載入資產資料失敗: ' + error.message, 'error');
+                document.getElementById('assetList').innerHTML = '<p>載入失敗: ' + error.message + '</p>';
             } finally {
                 showLoading(false);
             }
@@ -974,7 +1060,7 @@
             data.action = 'addPurchaseRequest';
 
             try {
-                const response = await fetch(GAS_URL, {
+                const result = await safeFetch(GAS_URL, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -982,10 +1068,12 @@
                     body: JSON.stringify(data)
                 });
 
-                const result = await response.json();
                 if (result.success) {
                     showAlert('採購需求單提交成功！');
                     this.reset();
+                    // 重新設置預設日期
+                    const today = new Date().toISOString().split('T')[0];
+                    document.getElementById('applyDate').value = today;
                 } else {
                     showAlert('提交失敗: ' + result.error, 'error');
                 }
@@ -1005,7 +1093,7 @@
             data.action = 'addVendor';
 
             try {
-                const response = await fetch(GAS_URL, {
+                const result = await safeFetch(GAS_URL, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -1013,7 +1101,6 @@
                     body: JSON.stringify(data)
                 });
 
-                const result = await response.json();
                 if (result.success) {
                     showAlert('廠商資料保存成功！');
                     this.reset();
@@ -1037,7 +1124,7 @@
             data.action = 'addQuotation';
 
             try {
-                const response = await fetch(GAS_URL, {
+                const result = await safeFetch(GAS_URL, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -1045,7 +1132,6 @@
                     body: JSON.stringify(data)
                 });
 
-                const result = await response.json();
                 if (result.success) {
                     showAlert('詢價議價表提交成功！');
                     this.reset();
@@ -1068,7 +1154,7 @@
             data.action = 'addInventory';
 
             try {
-                const response = await fetch(GAS_URL, {
+                const result = await safeFetch(GAS_URL, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -1076,10 +1162,12 @@
                     body: JSON.stringify(data)
                 });
 
-                const result = await response.json();
                 if (result.success) {
                     showAlert('庫存資料更新成功！');
                     this.reset();
+                    // 重新設置預設日期
+                    const today = new Date().toISOString().split('T')[0];
+                    document.getElementById('inventoryDate').value = today;
                     loadInventory(); // 重新載入庫存列表
                 } else {
                     showAlert('更新失敗: ' + result.error, 'error');
@@ -1100,7 +1188,7 @@
             data.action = 'addAsset';
 
             try {
-                const response = await fetch(GAS_URL, {
+                const result = await safeFetch(GAS_URL, {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -1108,10 +1196,12 @@
                     body: JSON.stringify(data)
                 });
 
-                const result = await response.json();
                 if (result.success) {
                     showAlert('資產資料保存成功！');
                     this.reset();
+                    // 重新設置預設日期
+                    const today = new Date().toISOString().split('T')[0];
+                    document.getElementById('assetPurchaseDate').value = today;
                     loadAssets(); // 重新載入資產列表
                 } else {
                     showAlert('保存失敗: ' + result.error, 'error');
@@ -1128,12 +1218,17 @@
         document.getElementById('salesQuantity').addEventListener('input', calculateCurrentStock);
         document.getElementById('initialStock').addEventListener('input', calculateCurrentStock);
 
-        // 頁面載入時設置預設日期
+        // 頁面載入時設置預設日期和測試連接
         document.addEventListener('DOMContentLoaded', function() {
             const today = new Date().toISOString().split('T')[0];
             document.getElementById('applyDate').value = today;
             document.getElementById('inventoryDate').value = today;
             document.getElementById('assetPurchaseDate').value = today;
+            
+            // 自動測試連接
+            setTimeout(() => {
+                testConnection();
+            }, 1000);
         });
     </script>
 </body>
